@@ -1,0 +1,14 @@
+[project]
+name = "fastapi-anthropic-fs-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.30.0",
+    "fastapi>=0.111.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "python-dotenv>=1.0.0",
+    "uvicorn[standard]>=0.30.0",
+]
