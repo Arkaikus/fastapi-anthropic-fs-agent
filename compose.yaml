@@ -28,6 +28,7 @@ services:
         required: false   # skip if Ollama profile not active
       chromadb:
         condition: service_healthy
+        required: false
     profiles:
       - cloud    # docker compose --profile cloud up
       - ollama   # docker compose --profile ollama up
