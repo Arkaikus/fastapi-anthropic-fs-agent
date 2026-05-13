@@ -49,7 +49,7 @@ class AgentService:
 
                 tool_uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
                 if not tool_uses:
-                    if response.stop_reason in {None, "end_turn"}:
+                    if response.stop_reason == "end_turn":
                         self._finalize_success(job, result_chunks)
                         return
                     if response.stop_reason == "max_tokens":

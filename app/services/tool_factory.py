@@ -81,9 +81,10 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
     async def list_directory(args: dict[str, Any]) -> ToolExecutionResult:
         try:
             path = _safe_resolve(base, str(args.get("path", ".")))
-            entries = sorted(path.iterdir(), key=lambda entry: (entry.is_file(), entry.name))
+            entries = [(entry, entry.is_file()) for entry in path.iterdir()]
+            entries.sort(key=lambda item: (item[1], item[0].name))
             text = "\n".join(
-                f"{'DIR ' if entry.is_dir() else 'FILE'} {entry.name}" for entry in entries
+                f"{'FILE' if is_file else 'DIR '} {entry.name}" for entry, is_file in entries
             ) or "(empty)"
             return _ok(text)
         except Exception as exc:
