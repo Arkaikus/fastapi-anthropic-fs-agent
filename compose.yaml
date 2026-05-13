@@ -62,6 +62,9 @@ services:
       - "8001:8000"
     volumes:
       - chromadb_data:/chroma/chroma
+    profiles:
+      - cloud
+      - ollama
     restart: unless-stopped
     healthcheck:
       test:
