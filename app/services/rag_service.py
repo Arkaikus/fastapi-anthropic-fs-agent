@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - graceful fallback when dependency is una
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_./-]+")
 _VECTOR_SIZE = 64
+_STOPWORDS = {"the", "and", "with", "for", "that", "from"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +39,7 @@ class RagService:
         base = Path(base_dir).resolve()
         documents = self._collect_documents(base)
         if not documents:
-            return self._build_exploration_summary(prompt=prompt, base=base, documents=documents)
+            return self._format_context(prompt=prompt, base=base, documents=documents, matches=[])
 
         matches = self._retrieve(prompt=prompt, documents=documents)
         return self._format_context(prompt=prompt, base=base, documents=documents, matches=matches)
@@ -114,14 +115,18 @@ class RagService:
         base: Path,
         documents: list[_Document],
     ) -> str:
-        root_entries = sorted(base.iterdir(), key=lambda entry: (entry.is_file(), entry.name))
         root_lines = ["Top-level workspace entries:"]
-        if root_entries:
-            for entry in root_entries[:12]:
-                prefix = "FILE" if entry.is_file() else "DIR "
-                root_lines.append(f"- {prefix} {entry.name}")
+        try:
+            root_entries = sorted(base.iterdir(), key=lambda entry: (entry.is_file(), entry.name))
+        except Exception:
+            root_lines.append("- Workspace directory not accessible.")
         else:
-            root_lines.append("- (empty)")
+            if root_entries:
+                for entry in root_entries[:12]:
+                    prefix = "FILE" if entry.is_file() else "DIR "
+                    root_lines.append(f"- {prefix} {entry.name}")
+            else:
+                root_lines.append("- (empty)")
 
         focused = self._rank_for_prompt(prompt=prompt, documents=documents)
         focused_lines = ["Prompt-focused exploration targets:"]
@@ -135,7 +140,7 @@ class RagService:
         keywords = {
             token.lower()
             for token in _TOKEN_RE.findall(prompt)
-            if len(token) >= 3 and token.lower() not in {"the", "and", "with", "for", "that", "from"}
+            if len(token) >= 3 and token.lower() not in _STOPWORDS
         }
         if not keywords:
             return documents[:5]

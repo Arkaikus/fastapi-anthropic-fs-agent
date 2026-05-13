@@ -38,11 +38,7 @@ class AgentService:
                 messages.append(
                     {
                         "role": "user",
-                        "content": (
-                            "Use the following precomputed workspace context to speed up exploration. "
-                            "Treat it as hints and verify with filesystem tools when needed.\n\n"
-                            f"{rag_context}"
-                        ),
+                        "content": rag_context,
                     }
                 )
                 self._repo.save(job)
