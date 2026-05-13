@@ -8,6 +8,7 @@ from app.core.logging import get_logger
 from app.domain.models import EventKind, Job, JobStatus
 from app.repositories.job_repository import AbstractJobRepository
 from app.services.event_listener import AgentEventListener
+from app.services.rag_service import RagService
 from app.services.tool_factory import LocalTool, ToolExecutionResult, make_fs_tools
 
 logger = get_logger(__name__)
@@ -17,6 +18,7 @@ class AgentService:
     def __init__(self, repo: AbstractJobRepository) -> None:
         self._repo = repo
         self._client = get_anthropic_client()
+        self._rag = RagService()
 
     async def run(self, job: Job) -> None:
         job.status = JobStatus.RUNNING
@@ -29,7 +31,22 @@ class AgentService:
             tool_map = {tool.name: tool for tool in tools}
             listener = AgentEventListener(job)
             result_chunks: list[str] = []
-            messages: list[dict[str, object]] = [{"role": "user", "content": job.prompt}]
+            messages: list[dict[str, object]] = []
+            rag_context = self._rag.build_context(prompt=job.prompt, base_dir=job.base_dir)
+            if rag_context:
+                job.log(EventKind.AGENT_INFO, "Prepared RAG + exploration context")
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Use the following precomputed workspace context to speed up exploration. "
+                            "Treat it as hints and verify with filesystem tools when needed.\n\n"
+                            f"{rag_context}"
+                        ),
+                    }
+                )
+                self._repo.save(job)
+            messages.append({"role": "user", "content": job.prompt})
             tool_call_count = 0
             last_stop_reason: str | None = None
 
