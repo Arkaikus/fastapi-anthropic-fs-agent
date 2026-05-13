@@ -173,7 +173,7 @@ class RagService:
             index = int.from_bytes(digest[:2], byteorder="big") % _VECTOR_SIZE
             vector[index] += 1.0
 
-        if not any(vector):
+        if all(value == 0.0 for value in vector):
             return vector
         norm = math.sqrt(sum(value * value for value in vector))
         return [value / norm for value in vector]
