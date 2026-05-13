@@ -23,6 +23,7 @@ app/
 ├── services/
 │   ├── agent_service.py         # Anthropic Messages API loop + tool orchestration
 │   ├── event_listener.py        # Anthropic responses → AgentEvent
+│   ├── rag_service.py           # Prompt-focused RAG + workspace exploration bootstrap
 │   └── tool_factory.py          # Repo-owned filesystem tool registry
 factory.py                       # create_app()
 main.py                          # Entrypoint
@@ -85,3 +86,15 @@ Agent file output lands in `.workspace/` on your host machine (bind-mounted).
 | `MODEL` | `claude-opus-4-5` | `llama3.1` |
 
 No code changes are needed to switch backends — the same Anthropic client is configured through `.env` and can target Anthropic cloud or an Ollama-compatible base URL.
+
+## Agent context priming (RAG + exploration)
+
+Before the first model turn, the API can precompute focused workspace context:
+- RAG retrieval over local workspace text files (via ChromaDB)
+- Prompt-focused exploration hints (top-level entries + likely relevant files)
+
+Environment knobs:
+- `RAG_ENABLED` (default `true`)
+- `RAG_MAX_FILES` (default `80`)
+- `RAG_MAX_FILE_CHARS` (default `4000`)
+- `RAG_QUERY_RESULTS` (default `5`)

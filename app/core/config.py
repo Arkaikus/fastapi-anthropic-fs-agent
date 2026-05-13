@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     model: str = Field("claude-opus-4-5", env="MODEL")
     agent_max_tokens: int = Field(2048, env="AGENT_MAX_TOKENS")
     agent_max_iterations: int = Field(8, env="AGENT_MAX_ITERATIONS")
+    rag_enabled: bool = Field(True, env="RAG_ENABLED")
+    rag_max_files: int = Field(80, env="RAG_MAX_FILES")
+    rag_max_file_chars: int = Field(4000, env="RAG_MAX_FILE_CHARS")
+    rag_query_results: int = Field(5, env="RAG_QUERY_RESULTS")
     agent_system_prompt: str = Field(
         (
             "You are a sandboxed filesystem agent. "
