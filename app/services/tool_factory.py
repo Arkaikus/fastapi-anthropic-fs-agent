@@ -99,7 +99,7 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
     async def file_exists(args: dict[str, Any]) -> ToolExecutionResult:
         try:
             exists = _safe_resolve(base, str(args["path"])).exists()
-            return _ok(str(exists).lower())
+            return _ok("true" if exists else "false")
         except Exception as exc:
             return _error(str(exc))
 
