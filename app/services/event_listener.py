@@ -1,59 +1,39 @@
 from __future__ import annotations
-from typing import Any
 
-from claude_agent_sdk import AssistantMessage, TextBlock
-from claude_agent_sdk.types import StreamEvent
+from anthropic.types import Message, TextBlock, ToolUseBlock
 
-from app.domain.models import EventKind, Job
 from app.core.logging import get_logger
+from app.domain.models import EventKind, Job
 
 logger = get_logger(__name__)
 
 
 class AgentEventListener:
-    """
-    Translates raw SDK messages (StreamEvent, AssistantMessage) into
-    structured AgentEvent entries on the Job domain model.
-    """
-
     def __init__(self, job: Job) -> None:
         self._job = job
 
-    async def on_message(self, message: Any) -> None:
-        if isinstance(message, StreamEvent):
-            await self._handle_stream_event(message)
-        elif isinstance(message, AssistantMessage):
-            self._handle_assistant_message(message)
+    def on_turn_start(self, turn_number: int) -> None:
+        self._job.log(EventKind.AGENT_INFO, f"Agent turn {turn_number} started")
 
-    async def _handle_stream_event(self, message: StreamEvent) -> None:
-        event = message.event
-        etype = event.get("type", "")
-        logger.debug("[job=%s] StreamEvent: %s", self._job.id, etype)
+    def on_message(self, message: Message) -> list[str]:
+        logger.debug("[job=%s] Anthropic stop_reason=%s", self._job.id, message.stop_reason)
+        self._job.log(
+            EventKind.AGENT_INFO,
+            f"Agent turn completed with stop_reason={message.stop_reason or 'unknown'}",
+        )
 
-        if etype == "content_block_start":
-            block = event.get("content_block", {})
-            if block.get("type") == "tool_use":
-                self._job.log(EventKind.TOOL_START, f"Calling tool: {block.get('name')}")
-
-        elif etype == "content_block_stop":
-            self._job.log(EventKind.TOOL_END, "Tool call finished")
-
-        elif etype == "content_block_delta":
-            delta = event.get("delta", {})
-            if delta.get("type") == "text_delta":
-                text = delta.get("text", "").strip()
-                if text:
-                    self._job.log(EventKind.TEXT_DELTA, text)
-
-        elif etype == "message_start":
-            self._job.log(EventKind.AGENT_INFO, "Agent turn started")
-
-        elif etype == "message_stop":
-            self._job.log(EventKind.AGENT_INFO, "Agent turn completed")
-
-    def _handle_assistant_message(self, message: AssistantMessage) -> None:
+        text_chunks: list[str] = []
         for block in message.content:
             if isinstance(block, TextBlock) and block.text.strip():
-                preview = block.text[:120]
+                preview = block.text.strip()[:120]
+                text_chunks.append(block.text)
+                self._job.log(EventKind.TEXT_DELTA, preview)
                 logger.info("[job=%s] Assistant: %s", self._job.id, preview)
-                self._job.log(EventKind.AGENT_INFO, f"Assistant: {preview}")
+            elif isinstance(block, ToolUseBlock):
+                self._job.log(EventKind.TOOL_START, f"Tool requested: {block.name}")
+                logger.info("[job=%s] Tool requested: %s", self._job.id, block.name)
+        return text_chunks
+
+    def on_tool_result(self, tool_name: str, detail: str, *, is_error: bool) -> None:
+        kind = EventKind.ERROR if is_error else EventKind.TOOL_END
+        self._job.log(kind, f"{tool_name}: {detail}")

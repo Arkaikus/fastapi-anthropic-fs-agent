@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-import anthropic as anthropic_sdk
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    TextBlock,
-    create_sdk_mcp_server,
-    query,
-)
+from anthropic.types import Message, TextBlock, ToolUseBlock
 
 from app.core.anthropic_client import get_anthropic_client
 from app.core.config import settings
@@ -15,20 +8,12 @@ from app.core.logging import get_logger
 from app.domain.models import EventKind, Job, JobStatus
 from app.repositories.job_repository import AbstractJobRepository
 from app.services.event_listener import AgentEventListener
-from app.services.tool_factory import make_fs_tools
+from app.services.tool_factory import LocalTool, ToolExecutionResult, make_fs_tools
 
 logger = get_logger(__name__)
 
 
 class AgentService:
-    """
-    Orchestrates the full agentic loop for a job.
-
-    The Anthropic client (cloud or Ollama) is injected via the
-    singleton from app.core.anthropic_client so the backend is
-    wired once at startup from environment variables.
-    """
-
     def __init__(self, repo: AbstractJobRepository) -> None:
         self._repo = repo
         self._client = get_anthropic_client()
@@ -40,34 +25,53 @@ class AgentService:
         logger.info("[job=%s] Running (model=%s)", job.id, settings.model)
 
         try:
-            fs_tools = make_fs_tools(job.base_dir)
-            server = create_sdk_mcp_server(name="fs", tools=fs_tools)
-            allowed = [f"mcp__fs__{t._tool_name}" for t in fs_tools]  # noqa: SLF001
-
-            options = ClaudeAgentOptions(
-                # Pass the pre-configured client so Ollama base_url is honoured
-                client=self._client,
-                model=settings.model,
-                mcp_servers={"fs": server},
-                allowed_tools=allowed,
-                include_partial_messages=True,
-            )
-
+            tools = make_fs_tools(job.base_dir)
+            tool_map = {tool.name: tool for tool in tools}
             listener = AgentEventListener(job)
             result_chunks: list[str] = []
+            messages: list[dict[str, object]] = [{"role": "user", "content": job.prompt}]
 
-            async for message in query(prompt=job.prompt, options=options):
-                await listener.on_message(message)
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            result_chunks.append(block.text)
+            for turn_number in range(1, settings.agent_max_iterations + 1):
+                listener.on_turn_start(turn_number)
+                response = await self._create_message(messages=messages, tools=tools)
+                text_chunks = listener.on_message(response)
+                result_chunks.extend(text_chunks)
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [self._serialize_block(block) for block in response.content],
+                    }
+                )
                 self._repo.save(job)
 
-            job.result = "".join(result_chunks)
-            job.status = JobStatus.COMPLETED
-            job.log(EventKind.AGENT_INFO, "Job completed successfully")
-            logger.info("[job=%s] Completed", job.id)
+                tool_uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
+                if not tool_uses:
+                    if response.stop_reason not in {None, "end_turn", "stop_sequence"}:
+                        raise RuntimeError(
+                            f"Agent stopped with stop_reason={response.stop_reason} before finishing."
+                        )
+                    self._finalize_success(job, result_chunks)
+                    return
+
+                tool_results = []
+                for tool_use in tool_uses:
+                    result = await self._invoke_tool(tool_use=tool_use, tool_map=tool_map)
+                    listener.on_tool_result(tool_use.name, result.content, is_error=result.is_error)
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": result.content,
+                            "is_error": result.is_error,
+                        }
+                    )
+                    self._repo.save(job)
+
+                messages.append({"role": "user", "content": tool_results})
+
+            raise RuntimeError(
+                f"Agent exceeded max iterations ({settings.agent_max_iterations}) without finishing."
+            )
 
         except Exception as exc:
             job.status = JobStatus.FAILED
@@ -77,3 +81,33 @@ class AgentService:
 
         finally:
             self._repo.save(job)
+
+    async def _create_message(self, *, messages: list[dict[str, object]], tools: list[LocalTool]) -> Message:
+        return await self._client.messages.create(
+            model=settings.model,
+            max_tokens=settings.agent_max_tokens,
+            system=settings.agent_system_prompt,
+            messages=messages,
+            tools=[tool.to_anthropic_tool() for tool in tools],
+        )
+
+    async def _invoke_tool(
+        self,
+        *,
+        tool_use: ToolUseBlock,
+        tool_map: dict[str, LocalTool],
+    ) -> ToolExecutionResult:
+        tool = tool_map.get(tool_use.name)
+        if tool is None:
+            return ToolExecutionResult(content=f"Unknown tool: {tool_use.name}", is_error=True)
+        return await tool.invoke(tool_use.input)
+
+    def _finalize_success(self, job: Job, result_chunks: list[str]) -> None:
+        job.result = "\n\n".join(chunk.strip() for chunk in result_chunks if chunk.strip()) or None
+        job.status = JobStatus.COMPLETED
+        job.log(EventKind.AGENT_INFO, "Job completed successfully")
+        logger.info("[job=%s] Completed", job.id)
+
+    @staticmethod
+    def _serialize_block(block: TextBlock | ToolUseBlock) -> dict[str, object]:
+        return block.model_dump(mode="json", exclude_none=True)

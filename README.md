@@ -1,7 +1,6 @@
 # fastapi-anthropic-fs-agent
 
-A production-ready Anthropic agent exposed via FastAPI with filesystem tools,
-async job queue, event tracking, and Docker Compose deployment.
+A FastAPI proof of concept that runs a repo-owned Anthropic agent loop with filesystem tools, async job tracking, and backend switching between Anthropic-hosted models and Ollama.
 
 ## Project Structure
 
@@ -14,7 +13,7 @@ app/
 │       └── jobs.py              # GET /jobs, /jobs/{id}, /jobs/{id}/events
 ├── core/
 │   ├── config.py                # pydantic-settings (env vars)
-│   ├── anthropic_client.py      # Singleton Anthropic client (cloud or Ollama)
+│   ├── anthropic_client.py      # Singleton async Anthropic client (cloud or Ollama)
 │   └── logging.py
 ├── domain/
 │   ├── models.py                # Job, AgentEvent, enums
@@ -22,9 +21,9 @@ app/
 ├── repositories/
 │   └── job_repository.py        # Abstract port + InMemory adapter
 ├── services/
-│   ├── agent_service.py         # Agentic loop orchestration
-│   ├── event_listener.py        # StreamEvent → AgentEvent
-│   └── tool_factory.py          # @tool filesystem factory
+│   ├── agent_service.py         # Anthropic Messages API loop + tool orchestration
+│   ├── event_listener.py        # Anthropic responses → AgentEvent
+│   └── tool_factory.py          # Repo-owned filesystem tool registry
 factory.py                       # create_app()
 main.py                          # Entrypoint
 Dockerfile
@@ -85,4 +84,4 @@ Agent file output lands in `.workspace/` on your host machine (bind-mounted).
 | `ANTHROPIC_BASE_URL` | _(blank)_ | `http://ollama:11434/v1` |
 | `MODEL` | `claude-opus-4-5` | `llama3.1` |
 
-No code changes are needed to switch backends — only `.env` values.
+No code changes are needed to switch backends — the same Anthropic client is configured through `.env` and can target Anthropic cloud or an Ollama-compatible base URL.

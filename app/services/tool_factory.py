@@ -1,82 +1,176 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import Any
 
-from claude_agent_sdk import tool
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+
+@dataclass(frozen=True, slots=True)
+class ToolExecutionResult:
+    content: str
+    is_error: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class LocalTool:
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    handler: Callable[[dict[str, Any]], Awaitable[ToolExecutionResult]]
+
+    def to_anthropic_tool(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
+
+    async def invoke(self, tool_input: dict[str, Any]) -> ToolExecutionResult:
+        return await self.handler(tool_input)
 
 
 def _safe_resolve(base: Path, rel: str) -> Path:
     resolved = (base / rel).resolve()
-    if not str(resolved).startswith(str(base)):
-        raise PermissionError(f"Path '{rel}' escapes the sandbox root '{base}'.")
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise PermissionError(f"Path '{rel}' escapes the sandbox root '{base}'.") from exc
     return resolved
 
 
-def _error(msg: str) -> dict:
-    return {"content": [{"type": "text", "text": msg}], "is_error": True}
+def _schema(
+    properties: dict[str, dict[str, Any]],
+    *,
+    required: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required or [],
+        "additionalProperties": False,
+    }
 
 
-def _ok(msg: str) -> dict:
-    return {"content": [{"type": "text", "text": msg}]}
+def _error(msg: str) -> ToolExecutionResult:
+    return ToolExecutionResult(content=msg, is_error=True)
 
 
-def make_fs_tools(base_dir: str) -> list:
-    """
-    Factory that returns a fresh set of sandboxed filesystem @tool functions.
-    Each job receives its own closure so base_dir is never shared across jobs.
-    """
+def _ok(msg: str) -> ToolExecutionResult:
+    return ToolExecutionResult(content=msg)
+
+
+def make_fs_tools(base_dir: str) -> list[LocalTool]:
     base = Path(base_dir).resolve()
 
-    @tool("read_file", "Read the text contents of a file.", {"path": str})
-    async def read_file(args: dict[str, Any]) -> dict:
+    async def read_file(args: dict[str, Any]) -> ToolExecutionResult:
         try:
-            text = _safe_resolve(base, args["path"]).read_text(encoding="utf-8")
+            text = _safe_resolve(base, str(args["path"])).read_text(encoding="utf-8")
             return _ok(text)
-        except Exception as e:
-            return _error(str(e))
+        except Exception as exc:
+            return _error(str(exc))
 
-    @tool("write_file", "Write text to a file, creating it if needed.", {"path": str, "content": str})
-    async def write_file(args: dict[str, Any]) -> dict:
+    async def write_file(args: dict[str, Any]) -> ToolExecutionResult:
         try:
-            path = _safe_resolve(base, args["path"])
+            path = _safe_resolve(base, str(args["path"]))
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(args["content"], encoding="utf-8")
+            path.write_text(str(args["content"]), encoding="utf-8")
             return _ok(f"Written: {path}")
-        except Exception as e:
-            return _error(str(e))
+        except Exception as exc:
+            return _error(str(exc))
 
-    @tool("list_directory", "List entries in a directory.", {"path": str})
-    async def list_directory(args: dict[str, Any]) -> dict:
+    async def list_directory(args: dict[str, Any]) -> ToolExecutionResult:
         try:
-            path = _safe_resolve(base, args.get("path", "."))
-            entries = sorted(path.iterdir(), key=lambda e: (e.is_file(), e.name))
+            path = _safe_resolve(base, str(args.get("path", ".")))
+            entries = sorted(path.iterdir(), key=lambda entry: (entry.is_file(), entry.name))
             text = "\n".join(
-                f"{'DIR ' if e.is_dir() else 'FILE'} {e.name}" for e in entries
+                f"{'DIR ' if entry.is_dir() else 'FILE'} {entry.name}" for entry in entries
             ) or "(empty)"
             return _ok(text)
-        except Exception as e:
-            return _error(str(e))
+        except Exception as exc:
+            return _error(str(exc))
 
-    @tool("delete_file", "Delete a file at the given path.", {"path": str})
-    async def delete_file(args: dict[str, Any]) -> dict:
+    async def delete_file(args: dict[str, Any]) -> ToolExecutionResult:
         try:
-            _safe_resolve(base, args["path"]).unlink()
+            _safe_resolve(base, str(args["path"])).unlink()
             return _ok(f"Deleted: {args['path']}")
-        except Exception as e:
-            return _error(str(e))
+        except Exception as exc:
+            return _error(str(exc))
 
-    @tool("file_exists", "Check whether a path exists.", {"path": str})
-    async def file_exists(args: dict[str, Any]) -> dict:
-        exists = _safe_resolve(base, args["path"]).exists()
-        return _ok(str(exists))
-
-    @tool("create_directory", "Create a directory and missing parents.", {"path": str})
-    async def create_directory(args: dict[str, Any]) -> dict:
+    async def file_exists(args: dict[str, Any]) -> ToolExecutionResult:
         try:
-            path = _safe_resolve(base, args["path"])
+            exists = _safe_resolve(base, str(args["path"])).exists()
+            return _ok(str(exists).lower())
+        except Exception as exc:
+            return _error(str(exc))
+
+    async def create_directory(args: dict[str, Any]) -> ToolExecutionResult:
+        try:
+            path = _safe_resolve(base, str(args["path"]))
             path.mkdir(parents=True, exist_ok=True)
             return _ok(f"Created: {path}")
-        except Exception as e:
-            return _error(str(e))
+        except Exception as exc:
+            return _error(str(exc))
 
-    return [read_file, write_file, list_directory, delete_file, file_exists, create_directory]
+    return [
+        LocalTool(
+            name="read_file",
+            description="Read the UTF-8 text contents of a file inside the workspace.",
+            input_schema=_schema(
+                {"path": {"type": "string", "description": "Relative path to the file."}},
+                required=["path"],
+            ),
+            handler=read_file,
+        ),
+        LocalTool(
+            name="write_file",
+            description="Write UTF-8 text to a file inside the workspace, creating parents if needed.",
+            input_schema=_schema(
+                {
+                    "path": {"type": "string", "description": "Relative path to the file."},
+                    "content": {"type": "string", "description": "Text content to write."},
+                },
+                required=["path", "content"],
+            ),
+            handler=write_file,
+        ),
+        LocalTool(
+            name="list_directory",
+            description="List files and directories inside a workspace directory.",
+            input_schema=_schema(
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory path. Use '.' for the workspace root.",
+                    }
+                }
+            ),
+            handler=list_directory,
+        ),
+        LocalTool(
+            name="delete_file",
+            description="Delete a file inside the workspace.",
+            input_schema=_schema(
+                {"path": {"type": "string", "description": "Relative path to the file."}},
+                required=["path"],
+            ),
+            handler=delete_file,
+        ),
+        LocalTool(
+            name="file_exists",
+            description="Check whether a file or directory exists inside the workspace.",
+            input_schema=_schema(
+                {"path": {"type": "string", "description": "Relative path to check."}},
+                required=["path"],
+            ),
+            handler=file_exists,
+        ),
+        LocalTool(
+            name="create_directory",
+            description="Create a directory inside the workspace, including any missing parents.",
+            input_schema=_schema(
+                {"path": {"type": "string", "description": "Relative directory path to create."}},
+                required=["path"],
+            ),
+            handler=create_directory,
+        ),
+    ]
