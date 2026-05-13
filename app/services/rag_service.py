@@ -3,8 +3,12 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -23,6 +27,7 @@ _RAG_SNIPPET_CHARS = 240
 _MAX_ROOT_ENTRIES = 12
 _MAX_FOCUSED_TARGETS = 8
 _STOPWORDS = {"the", "and", "with", "for", "that", "from"}
+_MAX_WORKSPACE_CACHES = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +36,23 @@ class _Document:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class _CachedFile:
+    signature: tuple[int, int]
+    text: str
+
+
+@dataclass(slots=True)
+class _WorkspaceCache:
+    collection_name: str
+    files: dict[str, _CachedFile]
+
+
 class RagService:
+    _lock = Lock()
+    _client = None
+    _workspace_caches: OrderedDict[str, _WorkspaceCache] = OrderedDict()
+
     def build_context(self, *, prompt: str, base_dir: str) -> str | None:
         if not settings.rag_enabled:
             return None
@@ -40,46 +61,80 @@ class RagService:
             return None
 
         base = Path(base_dir).resolve()
-        documents = self._collect_documents(base)
+        documents = self._sync_documents(base)
         if not documents:
             return self._format_context(prompt=prompt, base=base, documents=documents, matches=[])
 
-        matches = self._retrieve(prompt=prompt, documents=documents)
+        matches = self._retrieve(prompt=prompt, base=base, documents=documents)
         return self._format_context(prompt=prompt, base=base, documents=documents, matches=matches)
 
-    def _collect_documents(self, base: Path) -> list[_Document]:
-        documents: list[_Document] = []
-        for path in sorted(base.rglob("*")):
-            if len(documents) >= settings.rag_max_files:
-                break
-            if not path.is_file() or self._should_skip_path(path):
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")[: settings.rag_max_file_chars]
-            except Exception:
-                continue
-            if not text.strip():
-                continue
-            rel_path = str(path.relative_to(base))
-            documents.append(_Document(path=rel_path, text=text))
-        return documents
+    def _sync_documents(self, base: Path) -> list[_Document]:
+        with self._lock:
+            cache = self._get_workspace_cache(base)
+            collection = self._get_client().get_or_create_collection(name=cache.collection_name)
+            if not base.exists() or not base.is_dir():
+                self._delete_paths(collection=collection, paths=list(cache.files))
+                cache.files.clear()
+                return []
 
-    def _retrieve(self, *, prompt: str, documents: list[_Document]) -> list[_Document]:
+            current_paths: set[str] = set()
+            indexed_count = 0
+            for path in sorted(base.rglob("*")):
+                if indexed_count >= settings.rag_max_files:
+                    break
+                if not path.is_file() or self._should_skip_path(path):
+                    continue
+                rel_path = str(path.relative_to(base))
+                try:
+                    stat = path.stat()
+                    signature = (stat.st_mtime_ns, stat.st_size)
+                except Exception:
+                    continue
+
+                cached_file = cache.files.get(rel_path)
+                if cached_file and cached_file.signature == signature:
+                    current_paths.add(rel_path)
+                    indexed_count += 1
+                    continue
+                try:
+                    text = path.read_text(encoding="utf-8")[: settings.rag_max_file_chars]
+                except Exception:
+                    self._delete_paths(collection=collection, paths=[rel_path])
+                    cache.files.pop(rel_path, None)
+                    continue
+                if not text.strip():
+                    self._delete_paths(collection=collection, paths=[rel_path])
+                    cache.files.pop(rel_path, None)
+                    continue
+                collection.upsert(
+                    ids=[self._doc_id(rel_path)],
+                    documents=[text],
+                    embeddings=[self._embed(rel_path, text)],
+                    metadatas=[{"path": rel_path}],
+                )
+                cache.files[rel_path] = _CachedFile(signature=signature, text=text)
+                current_paths.add(rel_path)
+                indexed_count += 1
+
+            stale_paths = [path for path in cache.files if path not in current_paths]
+            if stale_paths:
+                self._delete_paths(collection=collection, paths=stale_paths)
+                for path in stale_paths:
+                    cache.files.pop(path, None)
+
+            return [_Document(path=path, text=cache.files[path].text) for path in sorted(cache.files)]
+
+    def _retrieve(self, *, prompt: str, base: Path, documents: list[_Document]) -> list[_Document]:
         if not documents:
             return []
-        client = chromadb.EphemeralClient()
-        collection = client.get_or_create_collection(name="rag-workspace")
-        collection.add(
-            ids=[f"doc-{idx}" for idx, _ in enumerate(documents)],
-            documents=[doc.text for doc in documents],
-            embeddings=[self._embed(doc.path, doc.text) for doc in documents],
-            metadatas=[{"path": doc.path} for doc in documents],
-        )
-        result = collection.query(
-            query_embeddings=[self._embed("", prompt)],
-            n_results=min(settings.rag_query_results, len(documents)),
-            include=["metadatas", "documents"],
-        )
+        with self._lock:
+            cache = self._get_workspace_cache(base)
+            collection = self._get_client().get_or_create_collection(name=cache.collection_name)
+            result = collection.query(
+                query_embeddings=[self._embed("", prompt)],
+                n_results=min(settings.rag_query_results, len(documents)),
+                include=["metadatas"],
+            )
         by_path = {doc.path: doc for doc in documents}
         ordered: list[_Document] = []
         for metadata in result.get("metadatas", [[]])[0]:
@@ -90,6 +145,43 @@ class RagService:
             if doc:
                 ordered.append(doc)
         return ordered
+
+    @classmethod
+    def _get_client(cls):
+        if cls._client is None:
+            cls._client = chromadb.EphemeralClient()
+        return cls._client
+
+    @classmethod
+    def _get_workspace_cache(cls, base: Path) -> _WorkspaceCache:
+        workspace_key = str(base)
+        cache = cls._workspace_caches.get(workspace_key)
+        if cache is not None:
+            cls._workspace_caches.move_to_end(workspace_key)
+            return cache
+        collection_hash = hashlib.sha256(workspace_key.encode("utf-8")).hexdigest()
+        cache = _WorkspaceCache(
+            collection_name=f"rag-workspace-{collection_hash}",
+            files={},
+        )
+        if len(cls._workspace_caches) >= _MAX_WORKSPACE_CACHES:
+            _, evicted = cls._workspace_caches.popitem(last=False)
+            try:
+                cls._get_client().delete_collection(name=evicted.collection_name)
+            except Exception as exc:
+                logger.debug("Failed to delete evicted RAG collection %s: %s", evicted.collection_name, exc)
+        cls._workspace_caches[workspace_key] = cache
+        return cache
+
+    @staticmethod
+    def _delete_paths(*, collection: Any, paths: Iterable[str]) -> None:
+        ids = [RagService._doc_id(path) for path in paths]
+        if ids:
+            collection.delete(ids=ids)
+
+    @staticmethod
+    def _doc_id(path: str) -> str:
+        return hashlib.sha256(path.encode("utf-8")).hexdigest()
 
     def _format_context(
         self,
