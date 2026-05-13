@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +19,10 @@ except ImportError:  # pragma: no cover - graceful fallback when dependency is u
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_./-]+")
 _VECTOR_SIZE = 64
 _MAX_TOKENS_FOR_EMBEDDING = 1200
+_RAG_SNIPPET_CHARS = 240
+_MAX_ROOT_ENTRIES = 12
+_FALLBACK_FOCUSED_TARGETS = 5
+_MAX_FOCUSED_TARGETS = 8
 _STOPWORDS = {"the", "and", "with", "for", "that", "from"}
 
 
@@ -66,7 +69,7 @@ class RagService:
         if not documents:
             return []
         client = chromadb.EphemeralClient()
-        collection = client.get_or_create_collection(name=f"rag-session-{uuid.uuid4().hex}")
+        collection = client.get_or_create_collection(name="rag-workspace")
         collection.add(
             ids=[f"doc-{idx}" for idx, _ in enumerate(documents)],
             documents=[doc.text for doc in documents],
@@ -104,7 +107,7 @@ class RagService:
         if matches:
             lines = ["RAG matches (most relevant first):"]
             for doc in matches:
-                snippet = " ".join(doc.text.split())[:240]
+                snippet = " ".join(doc.text.split())[:_RAG_SNIPPET_CHARS]
                 lines.append(f"- {doc.path}: {snippet}")
             sections.append("\n".join(lines))
         return "\n\n".join(section for section in sections if section.strip())
@@ -123,7 +126,7 @@ class RagService:
             root_lines.append("- Workspace directory not accessible.")
         else:
             if root_entries:
-                for entry in root_entries[:12]:
+                for entry in root_entries[:_MAX_ROOT_ENTRIES]:
                     prefix = "FILE" if entry.is_file() else "DIR "
                     root_lines.append(f"- {prefix} {entry.name}")
             else:
@@ -144,7 +147,7 @@ class RagService:
             if len(token) >= 3 and token.lower() not in _STOPWORDS
         }
         if not keywords:
-            return documents[:5]
+            return documents[:_FALLBACK_FOCUSED_TARGETS]
 
         scored: list[tuple[int, _Document]] = []
         for doc in documents:
@@ -156,7 +159,7 @@ class RagService:
             if score > 0:
                 scored.append((score, doc))
         scored.sort(key=lambda item: (-item[0], item[1].path))
-        return [doc for _, doc in scored[:8]]
+        return [doc for _, doc in scored[:_MAX_FOCUSED_TARGETS]]
 
     @staticmethod
     def _should_skip_path(path: Path) -> bool:
