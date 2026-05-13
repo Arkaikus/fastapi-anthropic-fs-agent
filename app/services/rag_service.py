@@ -66,7 +66,7 @@ class RagService:
         if not documents:
             return []
         client = chromadb.EphemeralClient()
-        collection = client.get_or_create_collection(name=f"job-{uuid.uuid4().hex}")
+        collection = client.get_or_create_collection(name=f"rag-session-{uuid.uuid4().hex}")
         collection.add(
             ids=[f"doc-{idx}" for idx, _ in enumerate(documents)],
             documents=[doc.text for doc in documents],
@@ -98,7 +98,7 @@ class RagService:
         matches: list[_Document],
     ) -> str:
         sections: list[str] = [
-            "Workspace context generated before tool use. Treat this as hints and verify with tools.",
+            "Workspace context generated before tool use. Treat these as hints and verify with tools.",
             self._build_exploration_summary(prompt=prompt, base=base, documents=documents),
         ]
         if matches:
@@ -171,7 +171,7 @@ class RagService:
             index = int.from_bytes(digest[:2], byteorder="big") % _VECTOR_SIZE
             vector[index] += 1.0
 
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm == 0:
+        if not any(vector):
             return vector
+        norm = math.sqrt(sum(value * value for value in vector))
         return [value / norm for value in vector]

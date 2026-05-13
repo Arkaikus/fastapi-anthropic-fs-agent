@@ -36,7 +36,7 @@ class AgentService:
             if rag_context:
                 job.log(
                     EventKind.AGENT_INFO,
-                    "Prepared retrieval-augmented generation and exploration context",
+                    "Prepared RAG and exploration context",
                 )
                 messages.append(
                     {
