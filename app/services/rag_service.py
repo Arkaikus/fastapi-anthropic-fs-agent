@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 try:
     import chromadb
-except ImportError:  # pragma: no cover - graceful fallback when dependency is unavailable.
+except ImportError:  # pragma: no cover - Graceful fallback when dependency is unavailable.
     chromadb = None
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_./-]+")
@@ -21,7 +21,6 @@ _VECTOR_SIZE = 64
 _MAX_TOKENS_FOR_EMBEDDING = 1200
 _RAG_SNIPPET_CHARS = 240
 _MAX_ROOT_ENTRIES = 12
-_FALLBACK_FOCUSED_TARGETS = 5
 _MAX_FOCUSED_TARGETS = 8
 _STOPWORDS = {"the", "and", "with", "for", "that", "from"}
 
@@ -101,7 +100,7 @@ class RagService:
         matches: list[_Document],
     ) -> str:
         sections: list[str] = [
-            "Workspace context generated before tool use. Treat these as hints and verify with tools.",
+            "Workspace context generated before tool use. Treat these as hints; if tools are available, verify before acting.",
             self._build_exploration_summary(prompt=prompt, base=base, documents=documents),
         ]
         if matches:
@@ -147,7 +146,7 @@ class RagService:
             if len(token) >= 3 and token.lower() not in _STOPWORDS
         }
         if not keywords:
-            return documents[:_FALLBACK_FOCUSED_TARGETS]
+            return []
 
         scored: list[tuple[int, _Document]] = []
         for doc in documents:
