@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import anthropic as anthropic_sdk
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -8,6 +9,7 @@ from claude_agent_sdk import (
     query,
 )
 
+from app.core.anthropic_client import get_anthropic_client
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.models import EventKind, Job, JobStatus
@@ -20,21 +22,22 @@ logger = get_logger(__name__)
 
 class AgentService:
     """
-    Orchestrates the full agentic loop for a job:
-      1. Build sandboxed tools for the job's base_dir
-      2. Attach the event listener
-      3. Stream messages from query()
-      4. Persist state via the injected repository
+    Orchestrates the full agentic loop for a job.
+
+    The Anthropic client (cloud or Ollama) is injected via the
+    singleton from app.core.anthropic_client so the backend is
+    wired once at startup from environment variables.
     """
 
     def __init__(self, repo: AbstractJobRepository) -> None:
         self._repo = repo
+        self._client = get_anthropic_client()
 
     async def run(self, job: Job) -> None:
         job.status = JobStatus.RUNNING
         job.log(EventKind.AGENT_INFO, "Job started")
         self._repo.save(job)
-        logger.info("[job=%s] Running", job.id)
+        logger.info("[job=%s] Running (model=%s)", job.id, settings.model)
 
         try:
             fs_tools = make_fs_tools(job.base_dir)
@@ -42,6 +45,9 @@ class AgentService:
             allowed = [f"mcp__fs__{t._tool_name}" for t in fs_tools]  # noqa: SLF001
 
             options = ClaudeAgentOptions(
+                # Pass the pre-configured client so Ollama base_url is honoured
+                client=self._client,
+                model=settings.model,
                 mcp_servers={"fs": server},
                 allowed_tools=allowed,
                 include_partial_messages=True,
@@ -50,17 +56,13 @@ class AgentService:
             listener = AgentEventListener(job)
             result_chunks: list[str] = []
 
-            async for message in query(
-                prompt=job.prompt,
-                options=options,
-            ):
+            async for message in query(prompt=job.prompt, options=options):
                 await listener.on_message(message)
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             result_chunks.append(block.text)
-
-                self._repo.save(job)   # persist event log incrementally
+                self._repo.save(job)
 
             job.result = "".join(result_chunks)
             job.status = JobStatus.COMPLETED

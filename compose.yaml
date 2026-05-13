@@ -1,0 +1,66 @@
+# docker compose up --env-file .env
+# Targets:
+#   - agent   : the FastAPI app
+#   - ollama  : local LLM backend (optional, comment out if using Anthropic cloud)
+
+services:
+
+  # ── FastAPI Agent ─────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # /workspace inside the container maps to .workspace on the host.
+      # All agent file I/O happens here so results are visible on the host.
+      DEFAULT_BASE_DIR: /workspace
+    volumes:
+      - workspace:/workspace
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false   # skip if Ollama profile not active
+    profiles:
+      - cloud    # docker compose --profile cloud up
+      - ollama   # docker compose --profile ollama up
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Ollama (optional local LLM backend) ───────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    profiles:
+      - ollama   # only started with: docker compose --profile ollama up
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  # Named volume — survives container restarts, visible on host via:
+  #   docker volume inspect fastapi-anthropic-fs-agent_workspace
+  # Or use a bind mount instead (see .env comment below).
+  workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${WORKSPACE_HOST_PATH:-.workspace}   # default: ./.workspace
+
+  ollama_models:
+    driver: local
