@@ -27,7 +27,7 @@ services:
         condition: service_healthy
         required: false   # skip if Ollama profile not active
       chromadb:
-        condition: service_started
+        condition: service_healthy
     profiles:
       - cloud    # docker compose --profile cloud up
       - ollama   # docker compose --profile ollama up
@@ -57,12 +57,24 @@ services:
 
   # ── ChromaDB (RAG vector store) ──────────────────────────────────────────────
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.5.5
     ports:
       - "8001:8000"
     volumes:
       - chromadb_data:/chroma/chroma
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat', timeout=2)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   # Named volume — survives container restarts, visible on host via:
