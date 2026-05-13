@@ -30,8 +30,8 @@ class AgentEventListener:
                 self._job.log(EventKind.TEXT_DELTA, preview)
                 logger.info("[job=%s] Assistant: %s", self._job.id, preview)
             elif isinstance(block, ToolUseBlock):
-                self._job.log(EventKind.TOOL_START, f"Tool requested: {block.name}")
-                logger.info("[job=%s] Tool requested: %s", self._job.id, block.name)
+                self._job.log(EventKind.TOOL_START, f"Tool started: {block.name}")
+                logger.info("[job=%s] Tool started: %s", self._job.id, block.name)
         return text_chunks
 
     def on_tool_result(self, tool_name: str, detail: str, *, is_error: bool) -> None:
