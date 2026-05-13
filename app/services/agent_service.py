@@ -34,7 +34,10 @@ class AgentService:
             messages: list[dict[str, object]] = []
             rag_context = self._rag.build_context(prompt=job.prompt, base_dir=job.base_dir)
             if rag_context:
-                job.log(EventKind.AGENT_INFO, "Prepared RAG + exploration context")
+                job.log(
+                    EventKind.AGENT_INFO,
+                    "Prepared retrieval-augmented generation and exploration context",
+                )
                 messages.append(
                     {
                         "role": "user",

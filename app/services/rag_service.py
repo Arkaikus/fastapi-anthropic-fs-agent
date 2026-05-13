@@ -14,11 +14,12 @@ logger = get_logger(__name__)
 
 try:
     import chromadb
-except Exception:  # pragma: no cover - graceful fallback when dependency is unavailable.
+except ImportError:  # pragma: no cover - graceful fallback when dependency is unavailable.
     chromadb = None
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_./-]+")
 _VECTOR_SIZE = 64
+_MAX_TOKENS_FOR_EMBEDDING = 1200
 _STOPWORDS = {"the", "and", "with", "for", "that", "from"}
 
 
@@ -165,7 +166,7 @@ class RagService:
     @staticmethod
     def _embed(path: str, text: str) -> list[float]:
         vector = [0.0] * _VECTOR_SIZE
-        for token in _TOKEN_RE.findall(f"{path} {text.lower()}")[:1200]:
+        for token in _TOKEN_RE.findall(f"{path} {text.lower()}")[:_MAX_TOKENS_FOR_EMBEDDING]:
             digest = hashlib.sha256(token.encode("utf-8")).digest()
             index = int.from_bytes(digest[:2], byteorder="big") % _VECTOR_SIZE
             vector[index] += 1.0
