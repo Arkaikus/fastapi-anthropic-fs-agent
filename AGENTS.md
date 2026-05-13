@@ -6,14 +6,14 @@
 - Backend selection is configuration-driven through `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and `MODEL`, which allows the same loop to target Anthropic-hosted models or an Ollama endpoint.
 
 ## Source map
-- Entrypoint: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/main.py`
-- App factory and routing: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/factory.py`
-- HTTP endpoints: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/api/routers/`
-- Agent loop orchestration: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/services/agent_service.py`
-- Tool registry and sandboxed filesystem operations: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/services/tool_factory.py`
-- Job/event models: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/domain/models.py`
-- Repository abstraction: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/repositories/job_repository.py`
-- Runtime configuration and Anthropic client wiring: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/app/core/`
+- Entrypoint: `main.py`
+- App factory and routing: `app/factory.py`
+- HTTP endpoints: `app/api/routers/`
+- Agent loop orchestration: `app/services/agent_service.py`
+- Tool registry and sandboxed filesystem operations: `app/services/tool_factory.py`
+- Job/event models: `app/domain/models.py`
+- Repository abstraction: `app/repositories/job_repository.py`
+- Runtime configuration and Anthropic client wiring: `app/core/`
 
 ## Working rules for this repo
 - Keep filesystem access sandboxed to the job workspace.
@@ -22,8 +22,8 @@
 - Persist job state after each meaningful agent step so polling endpoints stay useful.
 
 ## Common rules and skills source map
-- Common repo rules folder: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/.github/instructions/common/`
-- Common repo skills folder: `/home/runner/work/fastapi-anthropic-fs-agent/fastapi-anthropic-fs-agent/.github/skills/`
+- Common repo rules folder: `.github/instructions/common/`
+- Common repo skills folder: `.github/skills/`
 - These folders are not present in the current repository snapshot; add shared instructions and reusable skills there if the repo adopts them later.
 
 ## Validation

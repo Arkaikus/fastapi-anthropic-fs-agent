@@ -30,10 +30,13 @@ class AgentService:
             listener = AgentEventListener(job)
             result_chunks: list[str] = []
             messages: list[dict[str, object]] = [{"role": "user", "content": job.prompt}]
+            tool_call_count = 0
+            last_stop_reason: str | None = None
 
             for turn_number in range(1, settings.agent_max_iterations + 1):
                 listener.on_turn_start(turn_number)
                 response = await self._create_message(messages=messages, tools=tools)
+                last_stop_reason = response.stop_reason
                 text_chunks = listener.on_message(response)
                 result_chunks.extend(text_chunks)
                 messages.append(
@@ -55,6 +58,7 @@ class AgentService:
 
                 tool_results = []
                 for tool_use in tool_uses:
+                    tool_call_count += 1
                     result = await self._invoke_tool(tool_use=tool_use, tool_map=tool_map)
                     listener.on_tool_result(tool_use.name, result.content, is_error=result.is_error)
                     tool_results.append(
@@ -70,7 +74,9 @@ class AgentService:
                 messages.append({"role": "user", "content": tool_results})
 
             raise RuntimeError(
-                f"Agent exceeded max iterations ({settings.agent_max_iterations}) without finishing."
+                "Agent exceeded max iterations "
+                f"({settings.agent_max_iterations}) without finishing; "
+                f"last_stop_reason={last_stop_reason}, tool_calls={tool_call_count}."
             )
 
         except Exception as exc:
