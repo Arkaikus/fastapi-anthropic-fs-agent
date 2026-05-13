@@ -49,12 +49,14 @@ class AgentService:
 
                 tool_uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
                 if not tool_uses:
-                    if response.stop_reason not in {None, "end_turn", "stop_sequence"}:
-                        raise RuntimeError(
-                            f"Agent stopped with stop_reason={response.stop_reason} before finishing."
-                        )
-                    self._finalize_success(job, result_chunks)
-                    return
+                    if response.stop_reason in {None, "end_turn", "stop_sequence"}:
+                        self._finalize_success(job, result_chunks)
+                        return
+                    if response.stop_reason == "max_tokens":
+                        raise RuntimeError("Agent response hit max_tokens before completing.")
+                    raise RuntimeError(
+                        f"Agent stopped with stop_reason={response.stop_reason} without finishing."
+                    )
 
                 tool_results = []
                 for tool_use in tool_uses:
