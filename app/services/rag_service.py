@@ -149,7 +149,7 @@ class RagService:
     @classmethod
     def _get_client(cls):
         if cls._client is None:
-            cls._client = chromadb.EphemeralClient()
+            cls._client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
         return cls._client
 
     @classmethod

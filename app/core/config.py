@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     rag_max_files: int = Field(80, env="RAG_MAX_FILES")
     rag_max_file_chars: int = Field(4000, env="RAG_MAX_FILE_CHARS")
     rag_query_results: int = Field(5, env="RAG_QUERY_RESULTS")
+    chroma_host: str = Field("localhost", env="CHROMA_HOST")
+    chroma_port: int = Field(8000, env="CHROMA_PORT")
     agent_system_prompt: str = Field(
         (
             "You are a sandboxed filesystem agent. "
