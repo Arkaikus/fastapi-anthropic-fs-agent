@@ -98,3 +98,5 @@ Environment knobs:
 - `RAG_MAX_FILES` (default `80`)
 - `RAG_MAX_FILE_CHARS` (default `4000`)
 - `RAG_QUERY_RESULTS` (default `5`)
+- `CHROMA_HOST` (default `localhost`, set to `chromadb` in Docker Compose)
+- `CHROMA_PORT` (default `8000`)

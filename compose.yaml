@@ -18,12 +18,17 @@ services:
       # /workspace inside the container maps to .workspace on the host.
       # All agent file I/O happens here so results are visible on the host.
       DEFAULT_BASE_DIR: /workspace
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
     volumes:
       - workspace:/workspace
     depends_on:
       ollama:
         condition: service_healthy
         required: false   # skip if Ollama profile not active
+      chromadb:
+        condition: service_healthy
+        required: false
     profiles:
       - cloud    # docker compose --profile cloud up
       - ollama   # docker compose --profile ollama up
@@ -51,6 +56,30 @@ services:
       retries: 5
       start_period: 30s
 
+  # ── ChromaDB (RAG vector store) ──────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.5
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    profiles:
+      - cloud
+      - ollama
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat', timeout=2)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   # Named volume — survives container restarts, visible on host via:
   #   docker volume inspect fastapi-anthropic-fs-agent_workspace
@@ -68,3 +97,5 @@ volumes:
       type: none
       o: bind
       device: ~/.ollama
+
+  chromadb_data:
