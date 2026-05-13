@@ -103,7 +103,7 @@ class AgentService:
         return await tool.invoke(tool_use.input)
 
     def _finalize_success(self, job: Job, result_chunks: list[str]) -> None:
-        job.result = "\n\n".join(chunk.strip() for chunk in result_chunks if chunk.strip())
+        job.result = "".join(result_chunks).strip()
         job.status = JobStatus.COMPLETED
         job.log(EventKind.AGENT_INFO, "Job completed successfully")
         logger.info("[job=%s] Completed", job.id)
