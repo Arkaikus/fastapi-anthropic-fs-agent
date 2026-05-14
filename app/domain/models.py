@@ -6,18 +6,18 @@ from pydantic import BaseModel, Field
 
 
 class JobStatus(str, Enum):
-    PENDING   = "pending"
-    RUNNING   = "running"
+    PENDING = "pending"
+    RUNNING = "running"
     COMPLETED = "completed"
-    FAILED    = "failed"
+    FAILED = "failed"
 
 
 class EventKind(str, Enum):
-    TOOL_START  = "tool_start"
-    TOOL_END    = "tool_end"
-    TEXT_DELTA  = "text_delta"
-    AGENT_INFO  = "info"
-    ERROR       = "error"
+    TOOL_START = "tool_start"
+    TOOL_END = "tool_end"
+    TEXT_DELTA = "text_delta"
+    AGENT_INFO = "info"
+    ERROR = "error"
 
 
 class AgentEvent(BaseModel):

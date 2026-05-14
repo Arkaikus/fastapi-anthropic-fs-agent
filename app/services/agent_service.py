@@ -15,10 +15,10 @@ logger = get_logger(__name__)
 
 
 class AgentService:
-    def __init__(self, repo: AbstractJobRepository) -> None:
+    def __init__(self, repo: AbstractJobRepository, rag: RagService | None = None) -> None:
         self._repo = repo
         self._client = get_anthropic_client()
-        self._rag = RagService()
+        self._rag = rag or RagService()
 
     async def run(self, job: Job) -> None:
         job.status = JobStatus.RUNNING
@@ -70,9 +70,7 @@ class AgentService:
                         return
                     if response.stop_reason == "max_tokens":
                         raise RuntimeError("Agent response hit max_tokens before completing.")
-                    raise RuntimeError(
-                        f"Agent stopped with stop_reason={response.stop_reason} without finishing."
-                    )
+                    raise RuntimeError(f"Agent stopped with stop_reason={response.stop_reason} without finishing.")
 
                 tool_results = []
                 for tool_use in tool_uses:
@@ -91,11 +89,7 @@ class AgentService:
 
                 messages.append({"role": "user", "content": tool_results})
 
-            raise RuntimeError(
-                "Agent exceeded max iterations "
-                f"({settings.agent_max_iterations}) without finishing; "
-                f"last_stop_reason={last_stop_reason}, tool_calls={tool_call_count}."
-            )
+            raise RuntimeError(f"Agent exceeded max iterations ({settings.agent_max_iterations}) without finishing; last_stop_reason={last_stop_reason}, tool_calls={tool_call_count}.")
 
         except Exception as exc:
             job.status = JobStatus.FAILED

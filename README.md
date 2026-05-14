@@ -100,3 +100,22 @@ Environment knobs:
 - `RAG_QUERY_RESULTS` (default `5`)
 - `CHROMA_HOST` (default `localhost`, set to `chromadb` in Docker Compose)
 - `CHROMA_PORT` (default `8000`)
+
+Startup preindexing (optional):
+
+The app can optionally schedule background RAG indexing at FastAPI startup to avoid first-request latency. These settings are opt-in and disabled by default.
+
+New env vars:
+- `RAG_PREINDEX_ENABLED=false` — set to `true` to enable startup preindex scheduling.
+- `RAG_PREINDEX_PATHS=".workspace,examples"` — comma-separated list of paths to prewarm.
+- `RAG_BACKGROUND_WORKERS=1` — number of concurrent background index workers.
+
+Example `.env` entries to enable preindexing for the default workspace:
+
+```
+RAG_PREINDEX_ENABLED=true
+RAG_PREINDEX_PATHS=.workspace
+RAG_BACKGROUND_WORKERS=2
+```
+
+If `chromadb` is unavailable or unreachable, RAG remains gracefully disabled and the agent runs without retrieval augmentation.

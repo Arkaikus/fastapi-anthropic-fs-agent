@@ -2,6 +2,7 @@ from functools import lru_cache
 from fastapi import Depends
 from app.repositories.job_repository import AbstractJobRepository, InMemoryJobRepository
 from app.services.agent_service import AgentService
+from app.core.rag import get_rag_service
 
 
 @lru_cache(maxsize=1)
@@ -13,4 +14,5 @@ def get_job_repository() -> AbstractJobRepository:
 def get_agent_service(
     repo: AbstractJobRepository = Depends(get_job_repository),
 ) -> AgentService:
-    return AgentService(repo=repo)
+    rag = get_rag_service()
+    return AgentService(repo=repo, rag=rag)

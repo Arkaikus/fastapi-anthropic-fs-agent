@@ -83,9 +83,7 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
             path = _safe_resolve(base, str(args.get("path", ".")))
             entries = [(entry, entry.is_file()) for entry in path.iterdir()]
             entries.sort(key=lambda item: (item[1], item[0].name))
-            text = "\n".join(
-                f"{'FILE' if is_file else 'DIR '} {entry.name}" for entry, is_file in entries
-            ) or "(empty)"
+            text = "\n".join(f"{'FILE' if is_file else 'DIR '} {entry.name}" for entry, is_file in entries) or "(empty)"
             return _ok(text)
         except Exception as exc:
             return _error(str(exc))
@@ -117,7 +115,12 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
             name="read_file",
             description="Read the UTF-8 text contents of a file inside the workspace.",
             input_schema=_schema(
-                {"path": {"type": "string", "description": "Relative path to the file."}},
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the file.",
+                    }
+                },
                 required=["path"],
             ),
             handler=read_file,
@@ -127,8 +130,14 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
             description="Write UTF-8 text to a file inside the workspace, creating parents if needed.",
             input_schema=_schema(
                 {
-                    "path": {"type": "string", "description": "Relative path to the file."},
-                    "content": {"type": "string", "description": "Text content to write."},
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the file.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Text content to write.",
+                    },
                 },
                 required=["path", "content"],
             ),
@@ -151,7 +160,12 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
             name="delete_file",
             description="Delete a file inside the workspace.",
             input_schema=_schema(
-                {"path": {"type": "string", "description": "Relative path to the file."}},
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the file.",
+                    }
+                },
                 required=["path"],
             ),
             handler=delete_file,
@@ -169,7 +183,12 @@ def make_fs_tools(base_dir: str) -> list[LocalTool]:
             name="create_directory",
             description="Create a directory inside the workspace, including any missing parents.",
             input_schema=_schema(
-                {"path": {"type": "string", "description": "Relative directory path to create."}},
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory path to create.",
+                    }
+                },
                 required=["path"],
             ),
             handler=create_directory,

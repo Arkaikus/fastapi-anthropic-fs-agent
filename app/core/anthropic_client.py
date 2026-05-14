@@ -19,7 +19,7 @@ def get_anthropic_client() -> AsyncAnthropic:
     client targets that endpoint instead of api.anthropic.com so the same
     agent loop can run against Anthropic-hosted or Ollama-backed models.
     """
-    kwargs: dict[str, str] = {} 
+    kwargs: dict[str, str] = {}
     if settings.anthropic_api_key:
         kwargs.update({"api_key": settings.anthropic_api_key})
     else:

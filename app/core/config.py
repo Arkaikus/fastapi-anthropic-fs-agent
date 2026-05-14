@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     rag_query_results: int = Field(5, env="RAG_QUERY_RESULTS")
     chroma_host: str = Field("localhost", env="CHROMA_HOST")
     chroma_port: int = Field(8000, env="CHROMA_PORT")
+    # Preindex options: list of workspace paths to prewarm at startup
+    rag_preindex_enabled: bool = Field(False, env="RAG_PREINDEX_ENABLED")
+    rag_preindex_paths: list[str] = Field([], env="RAG_PREINDEX_PATHS")
+    rag_background_workers: int = Field(1, env="RAG_BACKGROUND_WORKERS")
     agent_system_prompt: str = Field(
         (
             "You are a sandboxed filesystem agent. "

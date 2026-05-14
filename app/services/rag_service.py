@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Any
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -53,6 +55,14 @@ class RagService:
     _client = None
     _workspace_caches: OrderedDict[str, _WorkspaceCache] = OrderedDict()
 
+    def __init__(self) -> None:
+        # background indexing queue and workers
+        self._task_queue: "asyncio.Queue[str | None]" = asyncio.Queue()
+        self._worker_tasks: list[asyncio.Task[None]] = []
+        self._pending: set[str] = set()
+        self._stopping = False
+        self._executor = ThreadPoolExecutor(max_workers=2)
+
     def build_context(self, *, prompt: str, base_dir: str) -> str | None:
         if not settings.rag_enabled:
             return None
@@ -61,12 +71,107 @@ class RagService:
             return None
 
         base = Path(base_dir).resolve()
-        documents = self._sync_documents(base)
+        documents = self._get_cached_documents(base)
         if not documents:
-            return self._format_context(prompt=prompt, base=base, documents=documents, matches=[])
+            return self._format_context(prompt=prompt, base=base, documents=[], matches=[])
 
         matches = self._retrieve(prompt=prompt, base=base, documents=documents)
         return self._format_context(prompt=prompt, base=base, documents=documents, matches=matches)
+
+    def _get_cached_documents(self, base: Path) -> list[_Document]:
+        with self._lock:
+            cache = self._get_workspace_cache(base)
+            if not cache.files:
+                return []
+            return [_Document(path=path, text=cache.files[path].text) for path in sorted(cache.files)]
+
+    async def prewarm(self, base_dir: str) -> None:
+        """Schedule a one-time prewarm of the given workspace path.
+
+        This enqueues the path for background indexing and returns quickly.
+        If the path is already pending or indexing, the call is a no-op.
+        """
+        if not settings.rag_enabled or chromadb is None:
+            return
+        base = str(Path(base_dir).resolve())
+        if base in self._pending:
+            return
+        self._pending.add(base)
+        await self._task_queue.put(base)
+        # ensure workers are started
+        if not self._worker_tasks:
+            self._start_workers(settings.rag_background_workers or 1)
+
+    def start_background_index(self, paths: list[str]) -> None:
+        """Kick off background indexing for a list of paths (non-blocking)."""
+        if not settings.rag_enabled or chromadb is None:
+            return
+        loop = asyncio.get_event_loop()
+
+        # schedule enqueues on the running loop
+        async def _enqueue_all():
+            for p in paths:
+                await self.prewarm(p)
+
+        try:
+            loop.create_task(_enqueue_all())
+        except RuntimeError:
+            # no running loop; best-effort synchronous enqueue
+            for p in paths:
+                base = str(Path(p).resolve())
+                if base not in self._pending:
+                    self._pending.add(base)
+                    # push into queue synchronously not possible outside loop
+                    # rely on workers starting when app loop runs
+                    pass
+
+    def _start_workers(self, count: int) -> None:
+        for _ in range(max(1, count)):
+            task = asyncio.create_task(self._worker_loop())
+            self._worker_tasks.append(task)
+
+    async def _worker_loop(self) -> None:
+        while not self._stopping:
+            try:
+                base = await self._task_queue.get()
+            except asyncio.CancelledError:
+                break
+            if base is None:
+                break
+            try:
+                path = Path(base)
+                loop = asyncio.get_running_loop()
+                # run the blocking sync indexing in a thread
+                await loop.run_in_executor(self._executor, self._sync_documents, path)
+            except Exception as exc:
+                logger.debug("RAG prewarm failed for %s: %s", base, exc)
+            finally:
+                self._pending.discard(base)
+                try:
+                    self._task_queue.task_done()
+                except Exception:
+                    pass
+
+    async def shutdown(self) -> None:
+        """Stop background workers and shutdown executor."""
+        self._stopping = True
+        # push sentinels to unblock workers
+        for _ in self._worker_tasks:
+            try:
+                await self._task_queue.put(None)
+            except Exception:
+                pass
+        for task in list(self._worker_tasks):
+            try:
+                task.cancel()
+                await task
+            except Exception:
+                pass
+        self._worker_tasks.clear()
+        try:
+            self._executor.shutdown(wait=False)
+        except Exception:
+            pass
 
     def _sync_documents(self, base: Path) -> list[_Document]:
         with self._lock:
@@ -169,7 +274,11 @@ class RagService:
             try:
                 cls._get_client().delete_collection(name=evicted.collection_name)
             except Exception as exc:
-                logger.debug("Failed to delete evicted RAG collection %s: %s", evicted.collection_name, exc)
+                logger.debug(
+                    "Failed to delete evicted RAG collection %s: %s",
+                    evicted.collection_name,
+                    exc,
+                )
         cls._workspace_caches[workspace_key] = cache
         return cache
 
@@ -232,11 +341,7 @@ class RagService:
         return "\n".join(root_lines + [""] + focused_lines)
 
     def _rank_for_prompt(self, *, prompt: str, documents: list[_Document]) -> list[_Document]:
-        keywords = {
-            token.lower()
-            for token in _TOKEN_RE.findall(prompt)
-            if len(token) >= 3 and token.lower() not in _STOPWORDS
-        }
+        keywords = {token.lower() for token in _TOKEN_RE.findall(prompt) if len(token) >= 3 and token.lower() not in _STOPWORDS}
         if not keywords:
             return []
 

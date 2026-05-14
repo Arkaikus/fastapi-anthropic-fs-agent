@@ -29,3 +29,23 @@
 ## Validation
 - Dependency install: `python -m pip install -r requirements.txt`
 - Syntax/import check used in this repo: `ANTHROPIC_API_KEY=dummy python -m compileall app main.py`
+
+## RAG preindexing (startup)
+
+This repository supports optional RAG preindexing at application startup so that workspace indexing does not block the first agent request.
+
+- Behavior: when enabled the application will schedule background indexing tasks for configured workspace paths at FastAPI startup. Indexing runs in background workers and uses a thread executor for file I/O and Chroma client calls so the event loop is not blocked.
+- Chromadb dependency: if `chromadb` is not installed or reachable, RAG and preindexing are skipped and the agent continues to operate without RAG.
+
+Config / env vars (new):
+
+- `RAG_PREINDEX_ENABLED` (default: `false`) — enable startup preindex scheduling.
+- `RAG_PREINDEX_PATHS` (default: empty) — comma-separated list of filesystem paths to prewarm (e.g. `.workspace,examples`).
+- `RAG_BACKGROUND_WORKERS` (default: `1`) — number of concurrent background indexing workers.
+
+Notes:
+
+- Preindexing is opt-in and disabled by default to avoid unexpected startup work.
+- The RAG cache is still maintained per-workspace; startup preindexing only improves first-request latency by doing index work in the background.
+- For large repositories, tune `RAG_BACKGROUND_WORKERS` and `RAG_MAX_FILES` to control memory and CPU usage.
+
