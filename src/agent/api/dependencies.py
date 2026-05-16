@@ -1,8 +1,8 @@
 from functools import lru_cache
 from fastapi import Depends
-from app.repositories.job_repository import AbstractJobRepository, InMemoryJobRepository
-from app.services.agent_service import AgentService
-from app.core.rag import get_rag_service
+from ..repositories.job_repository import AbstractJobRepository, InMemoryJobRepository
+from ..services.agent_service import AgentService
+from ..core.rag import get_rag_service
 
 
 @lru_cache(maxsize=1)

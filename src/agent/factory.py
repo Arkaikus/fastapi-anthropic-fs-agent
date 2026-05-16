@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-from app.api.routers import chat, jobs
-from app.core.config import settings
-from app.core.rag import get_rag_service
-from app.core.logging import get_logger
+from .api.routers import chat, jobs
+from .core.config import settings
+from .core.rag import get_rag_service
+from .core.logging import get_logger
 
 logger = get_logger(__name__)
 

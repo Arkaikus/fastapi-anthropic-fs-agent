@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from anthropic.types import Message, TextBlock, ToolUseBlock
 
-from app.core.logging import get_logger
-from app.domain.models import EventKind, Job
+from ..core.logging import get_logger
+from ..domain.models import EventKind, Job
 
 logger = get_logger(__name__)
 
@@ -23,7 +23,7 @@ class AgentEventListener:
         )
 
         text_chunks: list[str] = []
-        for block in message.content:
+        for block in message.content or []:
             if isinstance(block, TextBlock) and block.text.strip():
                 preview = block.text.strip()[:120]
                 text_chunks.append(block.text)

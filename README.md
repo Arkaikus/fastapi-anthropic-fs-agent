@@ -5,7 +5,8 @@ A FastAPI proof of concept that runs a repo-owned Anthropic agent loop with file
 ## Project Structure
 
 ```
-app/
+main.py                          # Compatibility launcher
+src/agent/
 ├── api/
 │   ├── dependencies.py          # FastAPI DI providers
 │   └── routers/
@@ -25,8 +26,8 @@ app/
 │   ├── event_listener.py        # Anthropic responses → AgentEvent
 │   ├── rag_service.py           # Prompt-focused RAG + workspace exploration bootstrap
 │   └── tool_factory.py          # Repo-owned filesystem tool registry
-factory.py                       # create_app()
-main.py                          # Entrypoint
+├── factory.py                   # create_app()
+└── main.py                      # FastAPI app entrypoint
 Dockerfile
 compose.yaml
 .env.example
@@ -39,8 +40,8 @@ requirements.txt
 cp .env.example .env
 # edit .env — set ANTHROPIC_API_KEY
 mkdir -p .workspace
-pip install -r requirements.txt
-uvicorn main:app --reload
+uv sync
+uv run uvicorn agent.main:app --reload --reload-dir src
 ```
 
 ## Docker Compose — Anthropic Cloud

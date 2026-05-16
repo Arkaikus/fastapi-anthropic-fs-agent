@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.api.dependencies import get_job_repository
-from app.domain.models import Job
-from app.domain.schemas import JobEventsResponse, JobSummary
-from app.repositories.job_repository import AbstractJobRepository
+from ..dependencies import get_job_repository
+from ...domain.models import Job
+from ...domain.schemas import JobEventsResponse, JobSummary
+from ...repositories.job_repository import AbstractJobRepository
 
 router = APIRouter()
 

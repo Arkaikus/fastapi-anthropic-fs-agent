@@ -4,8 +4,8 @@ from functools import lru_cache
 
 from anthropic import AsyncAnthropic
 
-from app.core.config import settings
-from app.core.logging import get_logger
+from .config import settings
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

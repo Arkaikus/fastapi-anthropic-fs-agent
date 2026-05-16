@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.domain.models import JobStatus, AgentEvent
+from .models import JobStatus, AgentEvent
 
 
 class ChatRequest(BaseModel):

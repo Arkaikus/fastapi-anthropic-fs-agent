@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from app.domain.models import Job
+from ..domain.models import Job
 
 
 class AbstractJobRepository(ABC):

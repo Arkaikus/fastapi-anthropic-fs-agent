@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from anthropic.types import Message, TextBlock, ToolUseBlock
 
-from app.core.anthropic_client import get_anthropic_client
-from app.core.config import settings
-from app.core.logging import get_logger
-from app.domain.models import EventKind, Job, JobStatus
-from app.repositories.job_repository import AbstractJobRepository
-from app.services.event_listener import AgentEventListener
-from app.services.rag_service import RagService
-from app.services.tool_factory import LocalTool, ToolExecutionResult, make_fs_tools
+from ..core.anthropic_client import get_anthropic_client
+from ..core.config import settings
+from ..core.logging import get_logger
+from ..domain.models import EventKind, Job, JobStatus
+from ..repositories.job_repository import AbstractJobRepository
+from .event_listener import AgentEventListener
+from .rag_service import RagService
+from .tool_factory import LocalTool, ToolExecutionResult, make_fs_tools
 
 logger = get_logger(__name__)
 

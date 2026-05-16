@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.services.rag_service import RagService
+from ..services.rag_service import RagService
 
 
 @lru_cache(maxsize=1)

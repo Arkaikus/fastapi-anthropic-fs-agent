@@ -2,12 +2,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
-from app.api.dependencies import get_agent_service, get_job_repository
-from app.core.config import settings
-from app.domain.models import Job
-from app.domain.schemas import ChatRequest, JobCreatedResponse
-from app.repositories.job_repository import AbstractJobRepository
-from app.services.agent_service import AgentService
+from ..dependencies import get_agent_service, get_job_repository
+from ...core.config import settings
+from ...domain.models import Job
+from ...domain.schemas import ChatRequest, JobCreatedResponse
+from ...repositories.job_repository import AbstractJobRepository
+from ...services.agent_service import AgentService
 
 router = APIRouter()
 

@@ -34,7 +34,13 @@ services:
       - ollama   # docker compose --profile ollama up
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)",
+        ]
       interval: 15s
       timeout: 5s
       retries: 3

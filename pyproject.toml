@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
 [project]
 name = "fastapi-anthropic-fs-agent"
 version = "0.1.0"
@@ -18,3 +22,9 @@ dependencies = [
 dev = [
     "ruff>=0.15.12",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/agent/**"]

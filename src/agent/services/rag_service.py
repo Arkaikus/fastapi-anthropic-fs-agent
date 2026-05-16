@@ -12,8 +12,8 @@ from typing import Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from app.core.config import settings
-from app.core.logging import get_logger
+from ..core.config import settings
+from ..core.logging import get_logger
 
 logger = get_logger(__name__)
 

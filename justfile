@@ -1,5 +1,5 @@
 dev:
-    uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
+    uv run uvicorn agent.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
 
 format:
     uv run ruff format . --line-length 190

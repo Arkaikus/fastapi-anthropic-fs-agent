@@ -6,14 +6,14 @@
 - Backend selection is configuration-driven through `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and `MODEL`, which allows the same loop to target Anthropic-hosted models or an Ollama endpoint.
 
 ## Source map
-- Entrypoint: `main.py`
-- App factory and routing: `app/factory.py`
-- HTTP endpoints: `app/api/routers/`
-- Agent loop orchestration: `app/services/agent_service.py`
-- Tool registry and sandboxed filesystem operations: `app/services/tool_factory.py`
-- Job/event models: `app/domain/models.py`
-- Repository abstraction: `app/repositories/job_repository.py`
-- Runtime configuration and Anthropic client wiring: `app/core/`
+- Entrypoint: `src/agent/main.py`
+- App factory and routing: `src/agent/factory.py`
+- HTTP endpoints: `src/agent/api/routers/`
+- Agent loop orchestration: `src/agent/services/agent_service.py`
+- Tool registry and sandboxed filesystem operations: `src/agent/services/tool_factory.py`
+- Job/event models: `src/agent/domain/models.py`
+- Repository abstraction: `src/agent/repositories/job_repository.py`
+- Runtime configuration and Anthropic client wiring: `src/agent/core/`
 
 ## Working rules for this repo
 - Keep filesystem access sandboxed to the job workspace.
@@ -28,7 +28,7 @@
 
 ## Validation
 - Dependency install: `python -m pip install -r requirements.txt`
-- Syntax/import check used in this repo: `ANTHROPIC_API_KEY=dummy python -m compileall app main.py`
+- Syntax/import check used in this repo: `ANTHROPIC_API_KEY=dummy python -m compileall src/agent`
 
 ## RAG preindexing (startup)
 
